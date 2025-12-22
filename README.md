@@ -164,14 +164,12 @@ Our task is based on enriched data from our previous works. Please, consider cit
 
 Droid: A Resource Suite for AI-Generated Code Detection
 ```
-@misc{orel2025textttdroidresourcesuiteaigenerated,
-      title={$\texttt{Droid}$: A Resource Suite for AI-Generated Code Detection}, 
-      author={Daniil Orel and Indraneil Paul and Iryna Gurevych and Preslav Nakov},
-      year={2025},
-      eprint={2507.10583},
-      archivePrefix={arXiv},
-      primaryClass={cs.SE},
-      url={https://arxiv.org/abs/2507.10583}, 
+@inproceedings{orel2025droid,
+  title={Droid: A resource suite for ai-generated code detection},
+  author={Orel, Daniil and Paul, Indraneil and Gurevych, Iryna and Nakov, Preslav},
+  booktitle={Proceedings of the 2025 Conference on Empirical Methods in Natural Language Processing},
+  pages={31251--31277},
+  year={2025}
 }
 ```
 
