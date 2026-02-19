@@ -1,0 +1,3 @@
+.specstory/
+baselines/SemEval-2026-Task13/
+*.parquet

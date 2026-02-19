@@ -1,0 +1,569 @@
+\documentclass[11pt]{article}
+
+% Change "review" to "final" to generate the final (sometimes called camera-ready) version.
+% Change to "preprint" to generate a non-anonymous version with page numbers.
+\usepackage[preprint]{acl}
+\usepackage{hyperref}
+% Standard package includes
+\usepackage{times}
+\usepackage{latexsym}
+\usepackage{url}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{geometry}
+\usepackage{tabularx}
+
+% For proper rendering and hyphenation of words containing Latin characters (including in bib files)
+\usepackage[T1]{fontenc}
+% For Vietnamese characters
+% \usepackage[T5]{fontenc}
+% See https://www.latex-project.org/help/documentation/encguide.pdf for other character sets
+
+% This assumes your files are encoded as UTF8
+\usepackage[utf8]{inputenc}
+
+% This is not strictly necessary, and may be commented out,
+% but it will improve the layout of the manuscript,
+% and will typically save some space.
+\usepackage{microtype}
+
+% This is also not strictly necessary, and may be commented out.
+% However, it will improve the aesthetics of text in
+% the typewriter font.
+\usepackage{inconsolata}
+
+%Including images in your LaTeX document requires adding
+%additional package(s)
+\usepackage{graphicx}
+
+% If the title and author information does not fit in the area allocated, uncomment the following
+%
+%\setlength\titlebox{<dim>}
+%
+% and set <dim> to something 5cm or larger.
+
+\title{Unified Detection of Machine-Generated
+Code Across Languages, Generators, and
+Usage Scenarios}
+
+% Author information can be set in various styles:
+% For several authors from the same institution:
+% \author{Author 1 \and ... \and Author n \\
+%         Address line \\ ... \\ Address line}
+% if the names do not fit well on one line use
+%         Author 1 \\ {\bf Author 2} \\ ... \\ {\bf Author n} \\
+% For authors from different institutions:
+% \author{Author 1 \\ Address line \\  ... \\ Address line
+%         \And  ... \And
+%         Author n \\ Address line \\ ... \\ Address line}
+% To start a separate ``row'' of authors use \AND, as in
+% \author{Author 1 \\ Address line \\  ... \\ Address line
+%         \AND
+%         Author 2 \\ Address line \\ ... \\ Address line \And
+%         Author 3 \\ Address line \\ ... \\ Address line}
+
+\author{
+  Divyanshu Giri$^1$ \quad Nikhita Ravi$^1$ \quad Shrish Kadam$^1$ \\
+  $^1$International Institute of Information Technology, Hyderabad \\
+  \texttt{\{divyanshu.giri, nikhita.ravi, shrish.kadam\}@research.iiit.ac.in}
+}
+
+%\author{
+%  \textbf{First Author\textsuperscript{1}},
+%  \textbf{Second Author\textsuperscript{1,2}},
+%  \textbf{Third T. Author\textsuperscript{1}},
+%  \textbf{Fourth Author\textsuperscript{1}},
+%\\
+%  \textbf{Fifth Author\textsuperscript{1,2}},
+%  \textbf{Sixth Author\textsuperscript{1}},
+%  \textbf{Seventh Author\textsuperscript{1}},
+%  \textbf{Eighth Author \textsuperscript{1,2,3,4}},
+%\\
+%  \textbf{Ninth Author\textsuperscript{1}},
+%  \textbf{Tenth Author\textsuperscript{1}},
+%  \textbf{Eleventh E. Author\textsuperscript{1,2,3,4,5}},
+%  \textbf{Twelfth Author\textsuperscript{1}},
+%\\
+%  \textbf{Thirteenth Author\textsuperscript{3}},
+%  \textbf{Fourteenth F. Author\textsuperscript{2,4}},
+%  \textbf{Fifteenth Author\textsuperscript{1}},
+%  \textbf{Sixteenth Author\textsuperscript{1}},
+%\\
+%  \textbf{Seventeenth S. Author\textsuperscript{4,5}},
+%  \textbf{Eighteenth Author\textsuperscript{3,4}},
+%  \textbf{Nineteenth N. Author\textsuperscript{2,5}},
+%  \textbf{Twentieth Author\textsuperscript{1}}
+%\\
+%\\
+%  \textsuperscript{1}Affiliation 1,
+%  \textsuperscript{2}Affiliation 2,
+%  \textsuperscript{3}Affiliation 3,
+%  \textsuperscript{4}Affiliation 4,
+%  \textsuperscript{5}Affiliation 5
+%\\
+%  \small{
+%    \textbf{Correspondence:} \href{mailto:email@domain}{email@domain}
+%  }
+%}
+
+\begin{document}
+\maketitle
+\begin{abstract}
+The proliferation of large language models (LLMs) capable of generating syntactically correct and semantically coherent code has made it increasingly difficult to distinguish machine-generated code from human-written code---especially across different programming languages, application domains, and generation techniques. This paper presents our system for \textbf{SemEval-2026 Task 13: Detecting Machine-Generated Code with Multiple Programming Languages, Generators, and Application Scenarios}. We focus on Subtask~A (binary detection of human vs.\ machine-generated code) and Subtask~B (multi-class authorship attribution across 10 LLM families). Our approach moves beyond the provided CodeBERT baseline by leveraging structure-aware pre-trained models such as GraphCodeBERT, experimenting with classification head architectures (Bi-LSTM, dense blocks), addressing severe class imbalance via focal loss and weighted sampling, and combining diverse model predictions through ensemble strategies. We describe our methodology, dataset analysis, experimental progress, and outline the remaining evaluation plan.
+\end{abstract}
+
+%------------------------------------------------------------------
+\section{Introduction}
+\label{sec:intro}
+%------------------------------------------------------------------
+
+The rapid advancement of code-generating large language models (LLMs)---such as GPT-4, DeepSeek-Coder, CodeLlama, and StarCoder---has brought enormous productivity gains to software engineering. However, it has simultaneously introduced critical concerns around code provenance, academic integrity, intellectual property, and software supply-chain security \cite{orel2025droid}. Reliably detecting whether a code snippet was written by a human or generated by an LLM is now an important and challenging research problem.
+
+\textbf{SemEval-2026 Task~13} \cite{orel-etal-2025-codet} formalizes this problem through three subtasks of increasing complexity:
+\begin{itemize}
+    \item \textbf{Subtask~A} (Binary Detection): Classify code as \textit{human-written} or \textit{machine-generated}.
+    \item \textbf{Subtask~B} (Multi-Class Authorship): Identify the author as human or one of 10 LLM families.
+    \item \textbf{Subtask~C} (Hybrid Detection): Distinguish fully human, fully machine, hybrid, and adversarial code.
+\end{itemize}
+
+The task is particularly challenging because evaluation explicitly tests generalization to \textit{unseen programming languages}, \textit{unseen application domains}, and \textit{unseen generators} not present during training. The official baseline employs \textsc{CodeBERT} \cite{feng-etal-2020-codebert}, a bimodal pre-trained model for programming and natural languages. While effective as a starting point, CodeBERT treats code primarily as sequential token data, potentially missing structural and data-flow patterns that differentiate human logic from generative artifacts.
+
+In this paper, we present the approach of team \textbf{Procastic Simulators}. We focus on Subtasks~A and B, proposing a multi-stage pipeline that replaces CodeBERT with structure-aware models (GraphCodeBERT \cite{guo2021graphcodebert}), engineers more expressive classification heads, addresses the severe class imbalance in Subtask~B, and ensembles diverse model predictions for robustness. Our code is publicly available.\footnote{\url{https://github.com/DivyG007/procastic-simulaters-SemEval-2026-Task13}}
+
+%------------------------------------------------------------------
+\section{Background and Related Work}
+\label{sec:related}
+%------------------------------------------------------------------
+
+\subsection{AI-Generated Text and Code Detection}
+
+The detection of AI-generated text has received significant attention in the NLP community. Early methods relied on statistical features such as perplexity, burstiness, and n-gram distributions \cite{mitchell2023detectgpt}. More recent approaches fine-tune pre-trained language models as binary classifiers. However, most prior work targets \textit{natural language} text (e.g., essays, news articles), and the detection of \textit{machine-generated code} presents unique challenges due to the highly structured and constrained nature of programming languages.
+
+\subsection{Code-Oriented Pre-trained Models}
+
+Several transformer-based models have been pre-trained on large code corpora:
+
+\begin{itemize}
+    \item \textbf{CodeBERT} \cite{feng-etal-2020-codebert}: A bimodal model pre-trained on natural language--programming language pairs using masked language modeling and replaced token detection. It serves as the official task baseline.
+    \item \textbf{GraphCodeBERT} \cite{guo2021graphcodebert}: Extends CodeBERT by incorporating \textit{data flow graphs} (DFGs) during pre-training, enabling the model to capture semantic-level code structure such as variable dependencies and data flow paths.
+    \item \textbf{UniXcoder} \cite{guo2022unixcoder}: A unified cross-modal pre-trained model that leverages AST (Abstract Syntax Tree) representations alongside code tokens.
+    \item \textbf{StarCoder / StarEncoder} \cite{li2023starcoder}: Trained on The Stack, a large multilingual code corpus, providing strong cross-lingual code representations.
+\end{itemize}
+
+\subsection{Machine-Generated Code Detection}
+
+The DROID resource suite \cite{orel2025droid} is the first large-scale benchmark specifically designed for AI-generated code detection, providing code samples across multiple languages, generators, and domains. The CoDet-M4 system \cite{orel-etal-2025-codet} established initial baselines using CodeBERT fine-tuning, demonstrating that while transformer-based models achieve strong in-distribution performance, generalization to unseen languages and domains remains a significant challenge.
+
+The CodeXGLUE benchmark \cite{lu2021codexglue} provides a comprehensive suite of code understanding and generation tasks, informing our choice of evaluation methodology and pre-trained model selection.
+
+%------------------------------------------------------------------
+\section{Task Description}
+\label{sec:task}
+%------------------------------------------------------------------
+
+We now describe the two subtasks we address in detail.
+
+\subsection{Subtask~A: Binary Machine-Generated Code Detection}
+
+Given a code snippet, the goal is to classify it as either \textit{fully human-written} or \textit{fully machine-generated}.
+
+\begin{itemize}
+    \item \textbf{Training data}: 500K samples (238K human / 262K machine) in C++, Python, and Java from the algorithmic domain (e.g., competitive programming).
+    \item \textbf{Validation data}: 100K samples.
+    \item \textbf{Evaluation}: Performance is measured across four generalization settings (Table~\ref{tab:taskA_eval}).
+\end{itemize}
+
+\begin{table}[ht]
+\centering
+\small
+\begin{tabularx}{\columnwidth}{@{}l l X@{}}
+\toprule
+\textbf{Setting} & \textbf{Language} & \textbf{Domain} \\ \midrule
+(i) Seen L, Seen D & C++, Py, Java & Algorithmic \\
+(ii) Unseen L, Seen D & Go, PHP, C\#, etc. & Algorithmic \\
+(iii) Seen L, Unseen D & C++, Py, Java & Research, Production \\
+(iv) Unseen L, Unseen D & Go, PHP, C\#, etc. & Research, Production \\ \bottomrule
+\end{tabularx}
+\caption{Subtask~A evaluation matrix: Models are tested across seen/unseen language and domain combinations.}
+\label{tab:taskA_eval}
+\end{table}
+
+This design explicitly tests whether detection systems learn language- and domain-agnostic features of machine generation, or merely overfit to surface-level patterns in the training distribution.
+
+\subsection{Subtask~B: Multi-Class Authorship Detection}
+
+Given a code snippet, predict its author: human, or one of 10 LLM families---DeepSeek-AI, Qwen, 01-ai, BigCode, Gemma, Phi, Meta-LLaMA, IBM-Granite, Mistral, and OpenAI.
+
+\begin{itemize}
+    \item \textbf{Training data}: 500K samples with severe class imbalance---442K human-written ($\sim$88\%) vs.\ 2K--10K per LLM family.
+    \item \textbf{Validation data}: 100K samples.
+    \item \textbf{Generalization}: Evaluation includes ``unseen authors''---specific models not present during training but belonging to known LLM families.
+\end{itemize}
+
+The extreme class imbalance (Table~\ref{tab:taskB_dist}) makes Subtask~B particularly challenging, as naive models tend to predict the majority class (human) for most samples.
+
+\begin{table}[ht]
+\centering
+\small
+\begin{tabularx}{\columnwidth}{@{}l r r@{}}
+\toprule
+\textbf{Class} & \textbf{Count} & \textbf{\%} \\ \midrule
+Human & 442,000 & 88.4 \\
+OpenAI & 10,000 & 2.0 \\
+Meta-LLaMA & 8,000 & 1.6 \\
+Qwen & 8,000 & 1.6 \\
+IBM-Granite & 8,000 & 1.6 \\
+Phi & 5,000 & 1.0 \\
+DeepSeek-AI & 4,000 & 0.8 \\
+Mistral & 4,000 & 0.8 \\
+01-ai & 3,000 & 0.6 \\
+BigCode & 2,000 & 0.4 \\
+Gemma & 2,000 & 0.4 \\ \bottomrule
+\end{tabularx}
+\caption{Subtask~B training set class distribution showing severe imbalance.}
+\label{tab:taskB_dist}
+\end{table}
+
+%------------------------------------------------------------------
+\section{Datasets}
+\label{sec:datasets}
+%------------------------------------------------------------------
+
+All data is provided by the task organizers via \href{https://www.kaggle.com/datasets/daniilor/semeval-2026-task13}{Kaggle} and \href{https://huggingface.co/datasets/DaniilOr/SemEval-2026-Task13}{HuggingFace} in Apache Parquet format. Each sample contains the following fields:
+
+\begin{itemize}
+    \item \texttt{code}: The source code snippet (string).
+    \item \texttt{label}: Integer label ID mapped via \texttt{label\_to\_id.json}.
+    \item \texttt{language}: Programming language metadata.
+    \item \texttt{generator}: The name/family of the LLM that produced the code (or ``human'').
+\end{itemize}
+
+Label mappings (\texttt{label\_to\_id.json} and \texttt{id\_to\_label.json}) are provided in each task folder. We use the official training and validation splits without any additional external data, in compliance with the task rules.
+
+\paragraph{Data Characteristics.} Preliminary exploration reveals several important properties:
+\begin{enumerate}
+    \item Code snippets vary widely in length---from a few lines to several hundred lines---with machine-generated code tending to be slightly longer and more uniformly formatted.
+    \item The training set covers only three programming languages (C++, Python, Java) and the algorithmic domain, while evaluation extends to Go, PHP, C\#, C, JavaScript, and the research/production domains.
+    \item Subtask~B suffers from extreme class imbalance, with the human class comprising approximately 88\% of training samples.
+\end{enumerate}
+
+%------------------------------------------------------------------
+\section{Proposed Methodology}
+\label{sec:method}
+%------------------------------------------------------------------
+
+Our approach is organized into five phases, building incrementally from the baseline toward a robust ensemble system.
+
+% Uncomment and add a figure file when ready:
+% \begin{figure}[ht]
+% \centering
+% \includegraphics[width=\columnwidth]{architecture.pdf}
+% \caption{High-level system architecture showing the multi-phase pipeline from input code to final ensemble prediction.}
+% \label{fig:architecture}
+% \end{figure}
+
+\subsection{Phase~1: Baseline Reproduction and Analysis}
+
+We first reproduce the official CodeBERT baseline \cite{feng-etal-2020-codebert} using the provided \texttt{baselines/train.py} script. This establishes reference Macro F1 scores on the validation set for both Subtask~A and B, and provides a foundation for error analysis.
+
+The baseline uses \texttt{microsoft/codebert-base} (125M parameters) with a linear classification head, trained with standard cross-entropy loss and the AdamW optimizer. Input code is tokenized using the RoBERTa tokenizer with truncation at 512 tokens.
+
+\subsection{Phase~2: Structure-Aware Modeling with GraphCodeBERT}
+
+We hypothesize that machine-generated code exhibits different data-flow properties compared to human-written code. Human developers tend to write code with more diverse variable naming, irregular control flow, and context-dependent patterns, while LLMs often produce code with more uniform structure.
+
+To exploit these differences, we replace the CodeBERT backbone with \textbf{GraphCodeBERT} \cite{guo2021graphcodebert}, which incorporates data flow graph (DFG) information during pre-training. This allows the model to capture:
+\begin{itemize}
+    \item \textbf{Variable dependency patterns}: How variables flow through computations---potentially distinct between human and machine code.
+    \item \textbf{Long-range semantic relationships}: DFG edges connect distant tokens that are semantically related, providing richer features than sequential attention alone.
+    \item \textbf{Language-agnostic structure}: Data flow patterns are more abstract than surface syntax, potentially improving generalization to unseen languages.
+\end{itemize}
+
+\subsection{Phase~3: Classification Head Engineering}
+
+The baseline uses a single linear layer on top of the \texttt{[CLS]} token embedding. We experiment with more expressive classification heads:
+
+\begin{itemize}
+    \item \textbf{Bi-LSTM Head}: A bidirectional LSTM over the full sequence of token embeddings, followed by attention pooling. This captures sequential dependencies in the feature space that may distinguish human from machine patterns.
+    \item \textbf{Dense Blocks}: Multi-layer perceptron with batch normalization, ReLU activation, and high dropout ($p=0.3$--$0.5$) to prevent overfitting on the training languages and domain.
+    \item \textbf{Auxiliary Feature Concatenation}: Optionally concatenating metadata features (programming language embedding, code length, comment density) with the transformer output before classification.
+\end{itemize}
+
+\subsection{Phase~4: Handling Class Imbalance (Subtask~B)}
+\label{sec:imbalance}
+
+The severe class imbalance in Subtask~B (88\% human) necessitates dedicated strategies:
+
+\begin{itemize}
+    \item \textbf{Weighted Random Sampling}: During training, we oversample minority LLM classes using PyTorch's \texttt{WeightedRandomSampler} to balance the effective class distribution per batch.
+    \item \textbf{Hierarchical Classification}: A two-stage approach---first binary (human vs.\ machine), then a second-stage classifier to identify the specific LLM family among the machine-generated samples.
+\end{itemize}
+
+\subsection{Phase~5: Ensemble Learning}
+
+To maximize robustness, especially for the challenging unseen-language and unseen-domain evaluation settings, we combine predictions from multiple diverse models:
+
+\begin{itemize}
+    \item \textsc{CodeBERT} \cite{feng-etal-2020-codebert}
+    \item \textsc{GraphCodeBERT} \cite{guo2021graphcodebert}
+    \item \textsc{UniXcoder} \cite{guo2022unixcoder}
+\end{itemize}
+
+Ensemble strategies include:
+\begin{enumerate}
+    \item \textbf{Soft Voting}: Averaging predicted probability distributions across models.
+    \item \textbf{Weighted Averaging}: Assigning higher weights to models that perform better on the validation set.
+    \item \textbf{Stacking}: Training a meta-learner (logistic regression) on the concatenated prediction vectors of base models.
+\end{enumerate}
+
+Model diversity is key: CodeBERT captures token-level patterns, GraphCodeBERT captures data-flow structure, and UniXcoder leverages AST information---providing complementary views of the same code.
+
+%------------------------------------------------------------------
+\section{Evaluation Metrics}
+\label{sec:metrics}
+%------------------------------------------------------------------
+
+The primary evaluation metric for all subtasks is \textbf{Macro F1-score}, which computes the unweighted mean of per-class F1 scores. This metric is particularly appropriate because:
+\begin{enumerate}
+    \item It gives equal importance to each class regardless of frequency, penalizing models that ignore minority classes.
+    \item It is robust to the severe class imbalance in Subtask~B.
+\end{enumerate}
+
+In addition to Macro F1, we report:
+\begin{itemize}
+    \item \textbf{Accuracy}: Overall correctness.
+    \item \textbf{Per-class Precision, Recall, and F1}: For detailed error analysis across classes.
+    \item \textbf{Setting-wise breakdown} (Subtask~A): Separate scores for seen/unseen language $\times$ seen/unseen domain to assess generalization.
+\end{itemize}
+
+%------------------------------------------------------------------
+\section{Experimental Results}
+\label{sec:results}
+%------------------------------------------------------------------
+
+\textit{This section will be populated with full experimental results upon completion of all training runs and evaluation.}
+
+\subsection{Baseline Results}
+
+% TODO: Fill in actual baseline numbers after running experiments
+\begin{table}[ht]
+\centering
+\small
+\begin{tabularx}{\columnwidth}{@{}l X c c@{}}
+\toprule
+\textbf{Task} & \textbf{Model} & \textbf{Macro F1} & \textbf{Accuracy} \\ \midrule
+A & CodeBERT (baseline) & -- & -- \\
+B & CodeBERT (baseline) & -- & -- \\
+\bottomrule
+\end{tabularx}
+\caption{Baseline results on the validation set. (To be filled.)}
+\label{tab:baseline_results}
+\end{table}
+
+\subsection{Model Comparison}
+
+% TODO: Fill in after running GraphCodeBERT and other model experiments
+\begin{table}[ht]
+\centering
+\small
+\begin{tabularx}{\columnwidth}{@{}l X c c@{}}
+\toprule
+\textbf{Task} & \textbf{Model} & \textbf{Macro F1} & \textbf{Accuracy} \\ \midrule
+A & CodeBERT & -- & -- \\
+A & GraphCodeBERT & -- & -- \\
+A & UniXcoder & -- & -- \\
+A & Ensemble & -- & -- \\ \midrule
+B & CodeBERT & -- & -- \\
+B & GraphCodeBERT & -- & -- \\
+B & UniXcoder & -- & -- \\
+B & Ensemble & -- & -- \\
+\bottomrule
+\end{tabularx}
+\caption{Model comparison on validation set. (To be filled.)}
+\label{tab:model_comparison}
+\end{table}
+
+\subsection{Subtask~A: Generalization Analysis}
+
+% TODO: Fill in per-setting results
+\begin{table}[ht]
+\centering
+\small
+\begin{tabularx}{\columnwidth}{@{}l X c c@{}}
+\toprule
+\textbf{Setting} & \textbf{Description} & \textbf{Macro F1} & \textbf{$\Delta$ vs.\ BL} \\ \midrule
+(i) & Seen Lang, Seen Domain & -- & -- \\
+(ii) & Unseen Lang, Seen Domain & -- & -- \\
+(iii) & Seen Lang, Unseen Domain & -- & -- \\
+(iv) & Unseen Lang, Unseen Domain & -- & -- \\
+\bottomrule
+\end{tabularx}
+\caption{Subtask~A generalization performance across evaluation settings. (To be filled.)}
+\label{tab:taskA_generalization}
+\end{table}
+
+\subsection{Subtask~B: Per-Class Analysis}
+
+% TODO: Fill in per-class F1 scores
+\begin{table}[ht]
+\centering
+\small
+\begin{tabularx}{\columnwidth}{@{}l c c c@{}}
+\toprule
+\textbf{Class} & \textbf{Prec.} & \textbf{Rec.} & \textbf{F1} \\ \midrule
+Human & -- & -- & -- \\
+DeepSeek-AI & -- & -- & -- \\
+Qwen & -- & -- & -- \\
+01-ai & -- & -- & -- \\
+BigCode & -- & -- & -- \\
+Gemma & -- & -- & -- \\
+Phi & -- & -- & -- \\
+Meta-LLaMA & -- & -- & -- \\
+IBM-Granite & -- & -- & -- \\
+Mistral & -- & -- & -- \\
+OpenAI & -- & -- & -- \\ \midrule
+\textbf{Macro Avg.} & -- & -- & -- \\
+\bottomrule
+\end{tabularx}
+\caption{Subtask~B per-class results for our best model. (To be filled.)}
+\label{tab:taskB_perclass}
+\end{table}
+
+\subsection{Ablation Study}
+
+% TODO: Ablation over loss functions, heads, and ensemble components
+\begin{table}[ht]
+\centering
+\small
+\begin{tabularx}{\columnwidth}{@{}X c c@{}}
+\toprule
+\textbf{Configuration} & \textbf{Task A F1} & \textbf{Task B F1} \\ \midrule
+GraphCodeBERT + Linear Head & -- & -- \\
+\quad + Bi-LSTM Head & -- & -- \\
+\quad + Dense Block Head & -- & -- \\
+\quad + Weighted Sampling & -- & -- \\
+Full Ensemble & -- & -- \\
+\bottomrule
+\end{tabularx}
+\caption{Ablation study showing contribution of each component. (To be filled.)}
+\label{tab:ablation}
+\end{table}
+
+%------------------------------------------------------------------
+\section{Error Analysis}
+\label{sec:error}
+%------------------------------------------------------------------
+
+\textit{This section will present a detailed analysis of failure cases upon completion of experiments.}
+
+Planned analyses include:
+\begin{itemize}
+    \item \textbf{Language-wise error distribution}: Which unseen programming languages are hardest to generalize to?
+    \item \textbf{Code length effects}: Do longer or shorter snippets systematically cause more errors?
+    \item \textbf{Generator confusion matrix}: Which LLM families are most often confused with each other or with human code?
+    \item \textbf{Domain transfer failures}: Qualitative examples where algorithmic-domain training fails on research/production code.
+\end{itemize}
+
+%------------------------------------------------------------------
+\section{Progress Report}
+\label{sec:progress}
+%------------------------------------------------------------------
+
+Table~\ref{tab:progress} summarizes the current status of each project component.
+
+\begin{table}[ht]
+\centering
+\small
+\begin{tabularx}{\columnwidth}{@{}X c@{}}
+\toprule
+\textbf{Objective} & \textbf{Status} \\ \midrule
+Environment setup \& data exploration & \checkmark \\
+Dataset download, verification, EDA & \checkmark \\
+Baseline (CodeBERT) for Task~A & \checkmark \\
+Baseline (CodeBERT) for Task~B & \checkmark \\
+Kaggle Phase~1 submission & \checkmark \\
+GraphCodeBERT fine-tuning (Task~A) & In Progress \\
+GraphCodeBERT fine-tuning (Task~B) & In Progress \\
+Class imbalance handling & In Progress \\
+Bi-LSTM / Dense classification heads & Planned \\
+UniXcoder experiments & Planned \\
+Ensemble strategy implementation & Planned \\
+Final evaluation \& error analysis & Planned \\
+Paper finalization & Planned \\
+\bottomrule
+\end{tabularx}
+\caption{Project progress as of March 2026.}
+\label{tab:progress}
+\end{table}
+
+\paragraph{Completed work.}
+\begin{enumerate}
+    \item Reproduced the official CodeBERT baseline for both Subtask~A and Subtask~B using the provided training scripts.
+    \item Conducted exploratory data analysis on training and trial parquet files, characterizing class distributions, code length statistics, and language coverage.
+    \item Submitted baseline predictions to the Kaggle Phase~1 public leaderboard for both tasks.
+    \item Set up experimental infrastructure including GPU training pipelines, logging, and evaluation scripts.
+\end{enumerate}
+
+\paragraph{Ongoing work.}
+\begin{enumerate}
+    \item Fine-tuning GraphCodeBERT on Task~A and Task~B training data with hyperparameter search.
+    \item Implementing and evaluating focal loss and weighted sampling strategies for Subtask~B class imbalance.
+    \item Benchmarking inference-time latency across model variants.
+\end{enumerate}
+
+\paragraph{Planned work.}
+\begin{enumerate}
+    \item Implement and evaluate alternative classification heads (Bi-LSTM, Dense Blocks).
+    \item Train and evaluate UniXcoder as the third ensemble component.
+    \item Build the ensemble pipeline (soft voting, weighted averaging, stacking).
+    \item Conduct full evaluation on the private test set and comprehensive error analysis.
+    \item Finalize the system description paper with complete results.
+\end{enumerate}
+
+%------------------------------------------------------------------
+\section{Timeline}
+\label{sec:timeline}
+%------------------------------------------------------------------
+
+\begin{table}[ht]
+\centering
+\small
+\begin{tabularx}{\columnwidth}{@{}l X@{}}
+\toprule
+\textbf{Dates} & \textbf{Milestone} \\ \midrule
+Jan 31 -- Feb 07 & \textbf{Setup \& Baseline}: Environment setup, data exploration, CodeBERT baseline reproduction and Kaggle submission. \\ \addlinespace[0.5ex]
+Feb 08 -- Feb 22 & \textbf{Model Experimentation}: GraphCodeBERT fine-tuning for Task~A and B; initial imbalance handling. \\ \addlinespace[0.5ex]
+Feb 23 -- Mar 10 & \textbf{Head Engineering}: Implementing Bi-LSTM and dense classification heads; UniXcoder experiments. \\ \addlinespace[0.5ex]
+Mar 11 -- Mar 25 & \textbf{Ensembling \& Tuning}: Ensemble pipeline development; threshold tuning; error analysis. \\ \addlinespace[0.5ex]
+Mar 26 -- Apr 08 & \textbf{Finalization}: Full evaluation on private test set; ablation study; report writing and presentation. \\ \bottomrule
+\end{tabularx}
+\caption{Project timeline (Spring 2026).}
+\label{tab:timeline}
+\end{table}
+
+%------------------------------------------------------------------
+\section{Conclusion}
+\label{sec:conclusion}
+%------------------------------------------------------------------
+
+We have presented our approach to SemEval-2026 Task~13 on detecting machine-generated code across multiple programming languages, generators, and application scenarios. Our system builds upon the CodeBERT baseline with three key improvements: (1)~structure-aware modeling via GraphCodeBERT to capture data-flow level patterns, (2)~expressive classification heads and class imbalance mitigation for the challenging multi-class authorship task, and (3)~ensemble learning across diverse code-oriented pre-trained models for robust generalization.
+
+As of this report, we have completed baseline reproduction, initial model experimentation, and Kaggle submissions. The remaining work focuses on completing the model comparison, implementing ensemble strategies, and conducting thorough error analysis. We expect our final system to achieve meaningful improvements over the baseline, particularly on the unseen-language and unseen-domain evaluation settings that test true generalization capability.
+
+%------------------------------------------------------------------
+% Acknowledgements
+%------------------------------------------------------------------
+% \section*{Acknowledgements}
+% We thank the SemEval-2026 Task 13 organizers for providing the datasets and evaluation infrastructure.
+\newpage
+\nocite{*}
+
+\bibliographystyle{acl_natbib}
+\bibliography{custom}
+
+% Bibliography entries for the entire Anthology, followed by custom entries
+%\bibliography{custom,anthology-overleaf-1,anthology-overleaf-2}
+
+% Custom bibliography entries only
+
+\end{document}
